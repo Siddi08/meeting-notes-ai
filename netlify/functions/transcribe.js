@@ -6,6 +6,9 @@ const openai = new OpenAI({
 });
 
 exports.handler = async (event) => {
+  console.log('Function called, method:', event.httpMethod);
+  console.log('Has body:', !!event.body);
+  
   // Handle CORS
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -20,10 +23,43 @@ exports.handler = async (event) => {
   }
 
   try {
+    // Check if body exists
+    if (!event.body) {
+      console.error('No body received');
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          error: 'No request body received'
+        })
+      };
+    }
+
+    console.log('Parsing body...');
     const { audioBase64, fileName } = JSON.parse(event.body);
+    
+    console.log('File name:', fileName);
+    console.log('Audio data length:', audioBase64 ? audioBase64.length : 0);
+
+    if (!audioBase64 || !fileName) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          error: 'Missing audioBase64 or fileName'
+        })
+      };
+    }
     
     // Convert base64 to buffer
     const audioBuffer = Buffer.from(audioBase64, 'base64');
+    console.log('Buffer size:', audioBuffer.length);
     
     // Determine file type from filename
     const fileExtension = fileName.split('.').pop().toLowerCase();
@@ -38,13 +74,17 @@ exports.handler = async (event) => {
 
     // Create a readable stream from buffer
     const audioStream = Readable.from(audioBuffer);
-    audioStream.path = fileName; // OpenAI needs a path property
+    audioStream.path = fileName;
 
+    console.log('Calling Whisper API...');
+    
     // Transcribe with Whisper
     const transcription = await openai.audio.transcriptions.create({
       file: audioStream,
       model: "whisper-1",
     });
+
+    console.log('Transcription successful');
 
     return {
       statusCode: 200,
@@ -58,7 +98,8 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error('Transcription error:', error);
+    console.error('ERROR:', error.message);
+    console.error('Full error:', error);
     return {
       statusCode: 500,
       headers: {
