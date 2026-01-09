@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Meeting Notes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .status.processing {
+            background: #fff4e6;
+            color: #f59e0b;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .notes-output {
+            margin-top: 30px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .notes-output h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .download-btn {
+            background: #10b981;
+            margin-top: 20px;
+        }
+
+        .download-btn:hover {
+            background: #059669;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ AI Meeting Notes</h1>
+        <p class="subtitle">Upload audio, get structured notes in seconds</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <p><strong>Click to upload</strong> or drag and drop</p>
+            <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                Supports MP3, WAV, M4A (max 25MB)
+            </p>
+            <input type="file" id="fileInput" accept="audio/*">
+            <div class="file-info hidden" id="fileInfo"></div>
+        </div>
+
+        <button class="btn" id="processBtn" disabled>
+            Generate Notes
+        </button>
+
+        <div id="status" class="status hidden"></div>
+
+        <div id="notesOutput" class="notes-output hidden">
+            <h2>Your Meeting Notes</h2>
+            <div id="notesContent"></div>
+            <button class="btn download-btn" id="downloadBtn">
+                Download as Markdown
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let generatedNotes = '';
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const processBtn = document.getElementById('processBtn');
+        const status = document.getElementById('status');
+        const notesOutput = document.getElementById('notesOutput');
+        const notesContent = document.getElementById('notesContent');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        });
+
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            handleFile(file);
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+
+            // Validate file type
+            if (!file.type.startsWith('audio/')) {
+                showStatus('Please upload an audio file', 'error');
+                return;
+            }
+
+            // Validate file size (25MB limit)
+            if (file.size > 25 * 1024 * 1024) {
+                showStatus('File too large. Maximum size is 25MB', 'error');
+                return;
+            }
+
+            selectedFile = file;
+            fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            fileInfo.classList.remove('hidden');
+            processBtn.disabled = false;
+            notesOutput.classList.add('hidden');
+        }
+
+        // Process audio
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            processBtn.disabled = true;
+            showStatus('Transcribing audio...', 'processing');
+
+            try {
+                // Convert audio to base64
+                const audioBase64 = await fileToBase64(selectedFile);
+
+                // Step 1: Transcribe
+                const transcriptResponse = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audioBase64: audioBase64.split(',')[1], // Remove data URL prefix
+                        fileName: selectedFile.name
+                    })
+                });
+
+                const transcriptData = await transcriptResponse.json();
+
+                if (!transcriptResponse.ok) {
+                    throw new Error(transcriptData.error || 'Transcription failed');
+                }
+
+                showStatus('Analyzing transcript...', 'processing');
+
+                // Step 2: Analyze
+                const analysisResponse = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transcript: transcriptData.transcript
+                    })
+                });
+
+                const analysisData = await analysisResponse.json();
+
+                if (!analysisResponse.ok) {
+                    throw new Error(analysisData.error || 'Analysis failed');
+                }
+
+                // Display notes
+                generatedNotes = analysisData.notes;
+                displayNotes(generatedNotes);
+                showStatus('Notes generated successfully!', 'success');
+
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+
+        // Download notes
+        downloadBtn.addEventListener('click', () => {
+            const blob = new Blob([generatedNotes], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `meeting-notes-${Date.now()}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.classList.remove('hidden');
+        }
+
+        function displayNotes(markdown) {
+            // Simple markdown to HTML conversion
+            const html = markdown
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                .replace(/^\- (.*$)/gm, '<li>$1</li>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/<li>/g, '<ul><li>')
+                .replace(/<\/li>\n/g, '</li></ul>');
+
+            notesContent.innerHTML = `<p>${html}</p>`;
+            notesOutput.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
