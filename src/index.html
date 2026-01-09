@@ -249,7 +249,7 @@
                 const audioBase64 = await fileToBase64(selectedFile);
 
                 // Step 1: Transcribe
-                const transcriptResponse = await fetch('/api/transcribe', {
+                const transcriptResponse = await fetch('/.netlify/functions/transcribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -267,7 +267,7 @@
                 showStatus('Analyzing transcript...', 'processing');
 
                 // Step 2: Analyze
-                const analysisResponse = await fetch('/api/analyze', {
+                const analysisResponse = await fetch('/.netlify/functions/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
